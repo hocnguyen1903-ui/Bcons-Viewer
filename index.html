@@ -1,28 +1,99 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BCONS Document Slicing Viewer</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <!-- THÊM THƯ VIỆN ĐÓNG GÓI PDF SẠCH (PDF-LIB): -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   
-  <!-- CSS MODULES -->
-  <?!= include('css_core'); ?>
-  <?!= include('css_components'); ?>
+  <!-- NẠP CSS CHUẨN WEB CHO LIVE SERVER -->
+  <link rel="stylesheet" href="css/css_core.css">
+  <link rel="stylesheet" href="css/css_components.css">
 </head>
 <body>
 
-  <!-- GIAO DIỆN HTML -->
-  <?!= include('ui_sidebar'); ?>
-  <?!= include('ui_preview'); ?>
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div class="sidebar-header"><i class="bi bi-folder2-open"></i> TÀI LIỆU HỢP ĐỒNG</div>
+    <div id="upload-zone" onclick="document.getElementById('local-file-input').click()">
+      <i class="bi bi-cloud-arrow-up"></i>
+      THÊM BẢN SCAN
+    </div>
+    <input type="file" id="local-file-input" accept="application/pdf" style="display: none;">
+    <div id="file-list"></div>
+  </div>
 
-  <!-- JS MODULES -->
-  <?!= include('js_state_storage'); ?>
-  <?!= include('js_search_engine'); ?>
-  <?!= include('js_pdf_pipeline'); ?>
-  <?!= include('js_ui_events'); ?>
+  <div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
+
+  <!-- MAIN PREVIEW -->
+  <div id="main-preview">
+    <div class="prv-toolbar">
+      <div style="display: flex; align-items: center; overflow: hidden;">
+        <button class="prv-btn" id="btn-toggle-sidebar" onclick="toggleSidebar()"><i class="bi bi-list" style="font-size: 13px;"></i></button>
+        <span id="prv-file-name">CHỌN TÀI LIỆU ĐỂ XEM</span>
+      </div>
+
+      <div id="proc-progress-box">
+        <div class="proc-info-row">
+          <span id="proc-stage-text">[1/4] ĐANG ĐỒNG BỘ DỮ LIỆU...</span>
+          <span id="proc-percent-text" style="color: #FFBA08;">0%</span>
+        </div>
+        <div class="proc-bar-track">
+          <div id="proc-bar-fill" class="proc-bar-fill"></div>
+        </div>
+        <div class="proc-warning">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          <span>Vui lòng không đóng trình duyệt trong lúc hệ thống đang đồng bộ...</span>
+        </div>
+      </div>
+
+      <div class="prv-tools">
+        <div class="search-box-wrap">
+          <i class="bi bi-search" style="color: #FFBA08; font-size: 11px;"></i>
+          <input type="text" id="ai-search-input" class="search-input" placeholder="Tìm kiếm..." onkeydown="handleSearchKey(event)">
+          <span id="search-counter" class="search-counter">0/0</span>
+          <button id="btn-prev" class="nav-arrow-btn" onclick="navigateMatch(-1)" disabled data-tip="Prev (Shift+Enter)"><i class="bi bi-chevron-up"></i></button>
+          <button id="btn-next" class="nav-arrow-btn" onclick="navigateMatch(1)" disabled data-tip="Next (Enter)"><i class="bi bi-chevron-down"></i></button>
+          <button class="prv-btn" onclick="handleSearchSubmit()" style="padding: 2px 7px; font-size: 11px; margin-left: 2px;">TÌM</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="viewport-container"></div>
+
+    <div id="page-indicator" class="floating-control-bar" style="display: none;">
+      <span>Page</span>
+      <input type="text" id="jump-page-input" class="page-jump-input" value="1" onkeydown="handlePageJumpKey(event)" data-tip="Jump to page">
+      <span id="total-pages-text">/ 0</span>
+
+      <div class="capsule-divider"></div>
+
+      <button class="capsule-btn" id="btn-download-pdf" onclick="downloadPdfFromJson()" data-tip="Download PDF"><i class="bi bi-download" style="font-size: 13px;"></i></button>
+      <button class="capsule-btn" id="btn-share-link" onclick="copyShareLink()" data-tip="Share Link"><i class="bi bi-share" style="font-size: 12px;"></i></button>
+      <button class="capsule-btn is-hidden" id="btn-scroll-top" onclick="handleSmartScrollUp()" data-tip="Top"><i class="bi bi-chevron-double-up" style="font-size: 13px;"></i></button>
+      <button class="capsule-btn" id="btn-scroll-bottom" onclick="handleSmartScrollDown()" data-tip="PL01"><i class="bi bi-chevron-double-down" style="font-size: 13px;"></i></button>
+      <button class="capsule-btn" id="btn-fullscreen" onclick="toggleFullScreen()" data-tip="Full screen"><i class="bi bi-fullscreen" style="font-size: 13px;"></i></button>
+
+      <div class="capsule-divider"></div>
+
+      <button class="capsule-btn" onclick="zoomChange(-0.15)" data-tip="Zoom Out"><i class="bi bi-dash-lg" style="font-size: 13px;"></i></button>
+      <span id="zoom-text" style="font-size: 12px; min-width: 38px; text-align: center; color: #fff; font-weight: 500;">100%</span>
+      <button class="capsule-btn" onclick="zoomChange(0.15)" data-tip="Zoom In"><i class="bi bi-plus-lg" style="font-size: 13px;"></i></button>
+    </div>
+
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <div id="loading-text" style="font-size: 12px; color: #FFBA08; font-weight: bold; letter-spacing: 1px;">ĐANG NẠP DỮ LIỆU...</div>
+    </div>
+  </div>
+
+  <!-- NẠP JAVASCRIPT CHUẨN WEB CHO LIVE SERVER -->
+  <script src="js/js_state_storage.js"></script>
+  <script src="js/js_search_engine.js"></script>
+  <script src="js/js_pdf_pipeline.js"></script>
+  <script src="js/js_ui_events.js"></script>
 
 </body>
 </html>

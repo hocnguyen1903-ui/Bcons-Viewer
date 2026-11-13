@@ -1,4 +1,3 @@
-<script>
 function paintBitmapBlob(canvas, blob, targetPdfPage, renderScale) {
   return createImageBitmap(blob).then(function(bmp) {
     if (!canvas.isConnected || isZooming) {
@@ -13,37 +12,94 @@ function paintBitmapBlob(canvas, blob, targetPdfPage, renderScale) {
   });
 }
 
-// 1. HÀM NHẢY ĐẾN TRANG BẤT KỲ
+let jumpScrollTimer = null;
+
 function jumpToPageNumber(pageNum, isSmooth = true) {
   if (!currentManifest || !currentManifest.pages.length) return;
+  const vp = document.getElementById("viewport-container");
   const total = currentManifest.pages.length;
   const targetIndex = Math.max(0, Math.min(total - 1, (parseInt(pageNum, 10) || 1) - 1));
   const targetPageObj = currentManifest.pages[targetIndex];
-  if (!targetPageObj) return;
+  if (!targetPageObj || !vp) return;
 
   const el = document.getElementById("page-wrapper-" + targetPageObj.pageNum);
-  if (el) {
-    el.scrollIntoView({ behavior: isSmooth ? "smooth" : "auto", block: "start" });
-    updatePageIndicatorUI(targetIndex + 1);
+  if (!el) return;
+
+  let destTop = Math.max(0, el.offsetTop - 25);
+  if (targetIndex === total - 1) {
+    destTop = Math.max(destTop, vp.scrollHeight - vp.clientHeight);
+  }
+
+  if (isSmooth && Math.abs(vp.scrollTop - destTop) >= 5) {
+    scrollLock = true;
+    let unlocked = false;
+
+    function onArrive() {
+      if (unlocked) return;
+      unlocked = true;
+      vp.removeEventListener("scrollend", onArrive);
+      clearTimeout(jumpScrollTimer);
+      scrollLock = false;
+      renderVisiblePagesOnly();
+      updateCurrentPageOnScroll();
+    }
+
+    vp.addEventListener("scrollend", onArrive);
+    clearTimeout(jumpScrollTimer);
+    jumpScrollTimer = setTimeout(onArrive, 1600);
+  }
+
+  vp.scrollTo({ top: destTop, behavior: isSmooth ? "smooth" : "auto" });
+  updatePageIndicatorUI(targetIndex + 1);
+}
+
+// HÀM PHỤ: LẤY TỌA ĐỘ ĐỈNH THỰC TẾ CỦA TRANG PHỤ LỤC
+function getAppendixOffsetTop() {
+  if (!currentManifest || !currentManifest.pages.length) return null;
+  const total = currentManifest.pages.length;
+  const appendixPage = currentManifest.appendixStartPage || total;
+  if (appendixPage <= 1 || appendixPage >= total) return null;
+
+  const targetObj = currentManifest.pages[appendixPage - 1];
+  const el = targetObj ? document.getElementById("page-wrapper-" + targetObj.pageNum) : null;
+  return el ? Math.max(0, el.offsetTop - 25) : null;
+}
+
+// 2A. CUỘN LÊN THÔNG MINH THEO TỌA ĐỘ VẬT LÝ THỰC TẾ (KHÔNG BAO GIỜ NHẦM)
+function handleSmartScrollUp() {
+  if (!currentManifest || !currentManifest.pages.length) return;
+  const vp = document.getElementById("viewport-container");
+  const total = currentManifest.pages.length;
+  const appendixPage = currentManifest.appendixStartPage || total;
+  const appTop = getAppendixOffsetTop();
+
+  // Nếu màn hình thực tế đang đứng PHÍA DƯỚI trang PL01 (hơn 30px) -> Cuộn ngược về PL01
+  if (vp && appTop !== null && vp.scrollTop > appTop + 30) {
+    jumpToPageNumber(appendixPage, true);
+  } else {
+    // Ngược lại -> Cuộn thẳng về Trang 1 (Top)
+    jumpToPageNumber(1, true);
   }
 }
 
-// 2. HÀM CUỘN XUỐNG THÔNG MINH 2 NẤC: BẤM LẦN 1 -> PL01, BẤM LẦN 2 -> CUỐI TRANG
+// 2B. CUỘN XUỐNG THÔNG MINH THEO TỌA ĐỘ VẬT LÝ THỰC TẾ (KHÔNG BAO GIỜ PHÓNG NHẦM XUỐNG CUỐI)
 function handleSmartScrollDown() {
   if (!currentManifest || !currentManifest.pages.length) return;
+  const vp = document.getElementById("viewport-container");
   const total = currentManifest.pages.length;
   const appendixPage = currentManifest.appendixStartPage || total;
-  const inputEl = document.getElementById("jump-page-input");
-  const currentPage = inputEl ? (parseInt(inputEl.value, 10) || 1) : 1;
+  const appTop = getAppendixOffsetTop();
 
-  if (appendixPage < total && currentPage < appendixPage) {
+  // Nếu màn hình thực tế đang đứng PHÍA TRÊN trang PL01 (cách trên 30px) -> Cuộn đúng tới PL01
+  if (vp && appTop !== null && vp.scrollTop < appTop - 30) {
     jumpToPageNumber(appendixPage, true);
   } else {
+    // Nếu màn hình đã đứng tại hoặc qua PL01 -> Cuộn xuống trang cuối cùng (Bottom)
     jumpToPageNumber(total, true);
   }
 }
 
-// 3. TỰ ĐỘNG ĐỔI GHI CHÚ (PL01 <-> Bottom) VÀ ẨN/HIỆN NÚT THEO VỊ TRÍ CUỘN
+// 3. TỰ ĐỘNG ĐỔI GHI CHÚ (Top <-> PL01 <-> Bottom) VÀ ẨN/HIỆN NÚT THEO VỊ TRÍ CUỘN
 function updatePageIndicatorUI(pNum) {
   const input = document.getElementById("jump-page-input");
   if (input && document.activeElement !== input) {
@@ -56,8 +112,21 @@ function updatePageIndicatorUI(pNum) {
   const btnTop = document.getElementById("btn-scroll-top");
   const btnBottom = document.getElementById("btn-scroll-bottom");
 
-  if (btnTop) btnTop.classList.toggle("is-hidden", num <= 1);
+  // Điều khiển nút Cuộn Lên (︽):
+  if (btnTop) {
+    if (num <= 1) {
+      btnTop.classList.add("is-hidden");
+    } else {
+      btnTop.classList.remove("is-hidden");
+      if (appendixPage > 1 && appendixPage < total && num > appendixPage) {
+        btnTop.setAttribute("data-tip", "PL01");
+      } else {
+        btnTop.setAttribute("data-tip", "Top");
+      }
+    }
+  }
 
+  // Điều khiển nút Cuộn Xuống (︾):
   if (btnBottom) {
     if (num >= total) {
       btnBottom.classList.add("is-hidden");
@@ -133,13 +202,20 @@ function copyShareLink() {
   google.script.run.makeFilePublicAndGetLink(currentFileId);
 }
 
+// 3. TỐI ƯU KÉO TRANG SIÊU MƯỢT (KHỬ ĐỘ TRỄ INP BẰNG requestAnimationFrame)
 function setupHandToolPanning() {
   const vp = document.getElementById("viewport-container");
-  
+  if (!vp) return;
+
+  let isPanTicking = false;
+  let targetScrollLeft = 0;
+  let targetScrollTop = 0;
+
   vp.addEventListener("pointerdown", function(e) {
     if (e.pointerType === "touch") return; 
     if (e.button !== 0 || e.target.closest(".search-box-wrap") || e.target.closest(".prv-tools")) return;
     
+    // Nếu click trúng chữ thì nhường quyền bôi đen copy
     if (e.target.classList.contains("text-overlay-item")) {
       return;
     }
@@ -161,13 +237,28 @@ function setupHandToolPanning() {
   vp.addEventListener("pointermove", function(e) {
     if (!isDragging) return;
     e.preventDefault();
-    vp.scrollLeft = scrollLeftStart - (e.clientX - startX);
-    vp.scrollTop = scrollTopStart - (e.clientY - startY);
+
+    // Tính toán tọa độ đích
+    targetScrollLeft = scrollLeftStart - (e.clientX - startX);
+    targetScrollTop = scrollTopStart - (e.clientY - startY);
+
+    // Chỉ cập nhật vị trí cuộn đồng bộ với khung hình GPU (60fps/120fps)
+    if (!isPanTicking) {
+      isPanTicking = true;
+      requestAnimationFrame(function() {
+        if (isDragging) {
+          vp.scrollLeft = targetScrollLeft;
+          vp.scrollTop = targetScrollTop;
+        }
+        isPanTicking = false;
+      });
+    }
   });
 
   const stopDrag = function(e) {
     if (!isDragging) return;
     isDragging = false;
+    isPanTicking = false;
     try { vp.releasePointerCapture(e.pointerId); } catch(err) {}
     vp.classList.remove("grabbing");
   };
@@ -394,6 +485,8 @@ async function loadFile(fileId, fileName, sizeMB, isProcessed, jsonId) {
   currentFileSizeMB = (sizeMB !== undefined) ? sizeMB : 0;
   document.getElementById("prv-file-name").textContent = fileName;
   clearSearchState();
+  const inp = document.getElementById("jump-page-input");
+  if (inp) inp.value = "1";
   
   document.querySelectorAll(".file-item").forEach(function(el) {
     el.classList.toggle("active", el.textContent.includes(fileName));
@@ -426,31 +519,104 @@ function handlePageJumpKey(e) {
   }
 }
 
+// CỜ KIỂM SOÁT NHỊP QUÉT MÀN HÌNH
+let isScrollTicking = false;
+
+// 1. TỐI ƯU CUỘN MƯỢT: KHỬ HOÀN TOÀN LAYOUT THRASHING BẰNG requestAnimationFrame
 function updateCurrentPageOnScroll() {
-  if (!currentManifest || !currentManifest.pages.length) return;
-  const container = document.getElementById("viewport-container");
-  const containerCenter = container.scrollTop + (container.clientHeight / 2);
-  
-  const wrappers = container.querySelectorAll(".page-wrapper");
-  for (let i = 0; i < wrappers.length; i++) {
-    const el = wrappers[i];
-    const top = el.offsetTop;
-    const bottom = top + el.clientHeight;
-    if (containerCenter >= top && containerCenter <= bottom) {
-      updatePageIndicatorUI(i + 1);
-      break;
+  if (isScrollTicking || scrollLock || !currentManifest || !currentManifest.pages.length) return;
+  isScrollTicking = true;
+
+  requestAnimationFrame(function() {
+    isScrollTicking = false;
+    const container = document.getElementById("viewport-container");
+    if (!container) return;
+
+    const total = currentManifest.pages.length;
+
+    // Chốt chặn đỉnh và đáy tuyệt đối
+    if (container.scrollTop <= 20) {
+      updatePageIndicatorUI(1);
+      return;
     }
-  }
+    if (container.scrollTop + container.clientHeight >= container.scrollHeight - 20) {
+      updatePageIndicatorUI(total);
+      return;
+    }
+
+    // ĐO THEO VÙNG ĐỌC MẮT (1/4 PHÍA TRÊN MÀN HÌNH) THAY VÌ TÂM GIỮA -> KHÔNG BAO GIỜ LỌT SANG TRANG 19
+    const focusLine = container.scrollTop + Math.min(200, container.clientHeight * 0.25);
+    const wrappers = container.children;
+
+    for (let i = 0; i < wrappers.length; i++) {
+      const el = wrappers[i];
+      if (!el.classList.contains("page-wrapper")) continue;
+
+      const top = el.offsetTop;
+      const bottom = top + el.clientHeight + 35; // Bao gồm cả khoảng hở margin giữa 2 trang
+      if (focusLine >= top && focusLine <= bottom) {
+        updatePageIndicatorUI(i + 1);
+        break;
+      }
+    }
+  });
 }
 
-function createPageWrapperElement(p) {
+function buildTextLayerForWrapper(wrapper) {
+  if (!wrapper || !currentManifest || !currentManifest.pages) return;
+  if (wrapper.querySelector(".text-layer")) return;
+
+  const idx = parseInt(wrapper.dataset.idx, 10);
+  const p = !isNaN(idx)
+    ? currentManifest.pages[idx]
+    : currentManifest.pages.find(item => String(item.pageNum) === String(wrapper.dataset.page));
+
+  if (!p || !p.textItems || p.textItems.length === 0) return;
+
+  const txtLayer = document.createElement("div");
+  txtLayer.className = "text-layer";
+  let txtHtml = "";
+  const items = p.textItems;
+
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const str = Array.isArray(it) ? it[0] : (it.str || "");
+    if (!str) continue;
+
+    const x = Array.isArray(it) ? it[1] : it.x;
+    const y = Array.isArray(it) ? it[2] : it.y;
+    const w = Array.isArray(it) ? it[3] : it.w;
+    const h = Array.isArray(it) ? it[4] : it.h;
+
+    const leftPct = (x / p.width) * 100;
+    const topPct = ((p.height - y - h) / p.height) * 100;
+    const widthPct = (w / p.width) * 100;
+    const heightPct = (h / p.height) * 100;
+    const fontSize = Math.max(8, Math.round(h * 0.88 * 10) / 10);
+
+    const safeText = str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    txtHtml += `<span class="text-overlay-item" style="left:${leftPct}%; top:${topPct}%; width:${widthPct}%; height:${heightPct}%; font-size:calc(${fontSize}px * var(--doc-scale));">${safeText}</span>`;
+  }
+
+  txtLayer.innerHTML = txtHtml;
+  wrapper.appendChild(txtLayer);
+}
+
+function removeTextLayerFromWrapper(wrapper) {
+  if (!wrapper) return;
+  const txtLayer = wrapper.querySelector(".text-layer");
+  if (txtLayer) txtLayer.remove();
+}
+
+function createPageWrapperElement(p, idx) {
   const pageWrapper = document.createElement("div");
   pageWrapper.id = "page-wrapper-" + p.pageNum;
   pageWrapper.className = "page-wrapper";
   pageWrapper.dataset.page = p.pageNum;
   pageWrapper.dataset.pdfPage = p.pdfPageNum || p.pageNum;
   pageWrapper.dataset.rotation = p.rotation || 0;
-  
+  if (idx !== undefined) pageWrapper.dataset.idx = idx;
+
   pageWrapper.style.width = "calc(" + p.width + "px * var(--doc-scale))";
   pageWrapper.style.height = "calc(" + p.height + "px * var(--doc-scale))";
 
@@ -459,30 +625,6 @@ function createPageWrapperElement(p) {
   canvas.dataset.page = p.pageNum;
   canvas.dataset.pdfPage = p.pdfPageNum || p.pageNum;
   pageWrapper.appendChild(canvas);
-
-  if (p.textItems && p.textItems.length > 0) {
-    const txtLayer = document.createElement("div");
-    txtLayer.className = "text-layer";
-    let txtHtml = "";
-    p.textItems.forEach(it => {
-      const str = Array.isArray(it) ? it[0] : (it.str || "");
-      const x = Array.isArray(it) ? it[1] : it.x;
-      const y = Array.isArray(it) ? it[2] : it.y;
-      const w = Array.isArray(it) ? it[3] : it.w;
-      const h = Array.isArray(it) ? it[4] : it.h;
-
-      const leftPct = (x / p.width) * 100;
-      const topPct = ((p.height - y - h) / p.height) * 100;
-      const widthPct = (w / p.width) * 100;
-      const heightPct = (h / p.height) * 100;
-      const fontSize = Math.max(8, Math.round(h * 0.88 * 10) / 10);
-      
-      const safeText = (str || "").replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      txtHtml += `<span class="text-overlay-item" style="left:${leftPct}%; top:${topPct}%; width:${widthPct}%; height:${heightPct}%; font-size:calc(${fontSize}px * var(--doc-scale));">${safeText}</span>`;
-    });
-    txtLayer.innerHTML = txtHtml;
-    pageWrapper.appendChild(txtLayer);
-  }
 
   return pageWrapper;
 }
@@ -522,8 +664,8 @@ function findZoomAnchor(vp, clientX, clientY) {
 
 async function renderSlicedDocument(targetPage = null) {
   if (!currentManifest) return;
-  const myEpoch = currentSessionEpoch;
   const container = document.getElementById("viewport-container");
+  if (!container) return;
 
   if (pageObserver) pageObserver.disconnect();
 
@@ -545,19 +687,19 @@ async function renderSlicedDocument(targetPage = null) {
   document.getElementById("page-indicator").style.display = totalPages > 0 ? "flex" : "none";
 
   const fragment = document.createDocumentFragment();
-  currentManifest.pages.forEach(p => {
-    const pageWrapper = createPageWrapperElement(p);
-    fragment.appendChild(pageWrapper);
-  });
+  for (let idx = 0; idx < totalPages; idx++) {
+    fragment.appendChild(createPageWrapperElement(currentManifest.pages[idx], idx));
+  }
 
-  const initialPage = targetPage !== null ? targetPage : (parseInt(document.getElementById("jump-page-input").value, 10) || 1);
+  const jumpInp = document.getElementById("jump-page-input");
+  const initialPage = targetPage !== null ? targetPage : ((jumpInp ? parseInt(jumpInp.value, 10) : 1) || 1);
   const firstWrapper = fragment.querySelector("#page-wrapper-" + initialPage) || fragment.children[0];
 
   if (firstWrapper) {
     const firstCanvas = firstWrapper.querySelector("canvas.page-img");
     const firstPdfPage = parseInt(firstWrapper.dataset.pdfPage || firstWrapper.dataset.page, 10);
     const cachedBlob = await getPageBitmap(currentFileId, firstPdfPage, cachedRenderScale);
-    if (cachedBlob) {
+    if (cachedBlob && firstCanvas) {
       const bmp = await createImageBitmap(cachedBlob);
       firstCanvas.width = bmp.width;
       firstCanvas.height = bmp.height;
@@ -565,6 +707,7 @@ async function renderSlicedDocument(targetPage = null) {
       firstCanvas.getContext("2d").drawImage(bmp, 0, 0);
       if (bmp.close) bmp.close();
     }
+    buildTextLayerForWrapper(firstWrapper);
   }
 
   if (container.replaceChildren) {
@@ -589,31 +732,32 @@ async function renderSlicedDocument(targetPage = null) {
   pageObserver = new IntersectionObserver((entries) => {
     if (isZooming || scrollLock) return;
     entries.forEach(entry => {
-      if (!entry.isIntersecting) return;
       const wrapper = entry.target;
-      const targetPdfPage = parseInt(wrapper.dataset.pdfPage || wrapper.dataset.page, 10);
       const canvas = wrapper.querySelector("canvas.page-img");
-      if (canvas && !scalesEqual(canvas.dataset.renderedScale, currentScale)) {
-        renderPageToCanvas(canvas, targetPdfPage);
+      if (!canvas) return;
+      const targetPdfPage = parseInt(wrapper.dataset.pdfPage || wrapper.dataset.page, 10);
+
+      if (entry.isIntersecting) {
+        buildTextLayerForWrapper(wrapper);
+        if (!scalesEqual(canvas.dataset.renderedScale, currentScale)) {
+          renderPageToCanvas(canvas, targetPdfPage);
+        }
+      } else {
+        if (wrapper.dataset.page !== "1") {
+          removeTextLayerFromWrapper(wrapper);
+          if (canvas.dataset.renderedScale) {
+            canvas.width = 1;
+            canvas.height = 1;
+            delete canvas.dataset.renderedScale;
+          }
+        }
       }
     });
-  }, { root: container, rootMargin: "350px 0px" });
+  }, { root: container, rootMargin: "1600px 0px" });
 
   wrappers.forEach(el => pageObserver.observe(el));
   container.removeEventListener("scroll", updateCurrentPageOnScroll);
   container.addEventListener("scroll", updateCurrentPageOnScroll, { passive: true });
-
-  (async function() {
-    for (let i = 0; i < wrappers.length; i++) {
-      if (myEpoch !== currentSessionEpoch) return;
-      const wrapper = wrappers[i];
-      const canvas = wrapper.querySelector("canvas.page-img");
-      const pdfPage = parseInt(wrapper.dataset.pdfPage || wrapper.dataset.page, 10);
-      if (canvas && !canvas.dataset.renderedScale) {
-        await renderPageToCanvas(canvas, pdfPage);
-      }
-    }
-  })();
 }
 
 function setupCtrlWheelZoom() {
@@ -631,21 +775,37 @@ function setupCtrlWheelZoom() {
 }
 
 function renderVisiblePagesOnly() {
-  if (!currentPdfDoc || isZooming || scrollLock) return;
+  if (!currentManifest || isZooming || scrollLock) return;
   const vp = document.getElementById("viewport-container");
+  if (!vp) return;
+
   const vpRect = vp.getBoundingClientRect();
   const jobs = [];
 
   document.querySelectorAll(".page-wrapper").forEach(wrapper => {
     const r = wrapper.getBoundingClientRect();
-    const isVisible = (r.bottom >= vpRect.top - 160 && r.top <= vpRect.bottom + 160);
-    if (!isVisible) return;
+    const isNearView = (r.bottom >= vpRect.top - 1200 && r.top <= vpRect.bottom + 1200);
     const canvas = wrapper.querySelector("canvas.page-img");
+    if (!canvas) return;
     const targetPdfPage = parseInt(wrapper.dataset.pdfPage || wrapper.dataset.page, 10);
-    if (!canvas || scalesEqual(canvas.dataset.renderedScale, currentScale)) return;
-    const mid = (r.top + r.bottom) / 2;
-    const viewMid = (vpRect.top + vpRect.bottom) / 2;
-    jobs.push({ canvas: canvas, targetPdfPage: targetPdfPage, dist: Math.abs(mid - viewMid) });
+
+    if (isNearView) {
+      buildTextLayerForWrapper(wrapper);
+      if (!scalesEqual(canvas.dataset.renderedScale, currentScale)) {
+        const mid = (r.top + r.bottom) / 2;
+        const viewMid = (vpRect.top + vpRect.bottom) / 2;
+        jobs.push({ canvas: canvas, targetPdfPage: targetPdfPage, dist: Math.abs(mid - viewMid) });
+      }
+    } else if (r.bottom < vpRect.top - 1800 || r.top > vpRect.bottom + 1800) {
+      if (wrapper.dataset.page !== "1") {
+        removeTextLayerFromWrapper(wrapper);
+        if (canvas.dataset.renderedScale) {
+          canvas.width = 1;
+          canvas.height = 1;
+          delete canvas.dataset.renderedScale;
+        }
+      }
+    }
   });
 
   jobs.sort((a, b) => a.dist - b.dist);
@@ -1014,4 +1174,3 @@ function updateFullscreenIconState() {
 
 document.addEventListener("fullscreenchange", updateFullscreenIconState);
 document.addEventListener("webkitfullscreenchange", updateFullscreenIconState);
-</script>

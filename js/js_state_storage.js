@@ -1,6 +1,43 @@
-<script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+// =========================================================================
+// CẦU NỐI TỰ ĐỘNG CHO VS CODE LIVE SERVER (127.0.0.1) & GITHUB PAGES
+// =========================================================================
+const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwlhByeOZIdDs4dIpioMo4e-2On3ad317kjoFMobpPiNUjtYi3o8Aa_jCXuoUWRucVJ/exec"; // Ví dụ: https://script.google.com/macros/s/AKfy.../exec
 
+if (typeof window.google === "undefined" || !window.google.script) {
+  function createGasBridge(onSuccess, onFailure) {
+    return new Proxy({}, {
+      get: function(_, prop) {
+        if (prop === "withSuccessHandler") {
+          return function(fn) { return createGasBridge(fn, onFailure); };
+        }
+        if (prop === "withFailureHandler") {
+          return function(fn) { return createGasBridge(onSuccess, fn); };
+        }
+        return function(...args) {
+          fetch(GAS_WEB_APP_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({ action: prop, args: args })
+          })
+          .then(res => res.json())
+          .then(res => {
+            if (res.ok) {
+              if (onSuccess) onSuccess(res.data);
+            } else {
+              if (onFailure) onFailure(new Error(res.error || "Lỗi Server GAS"));
+            }
+          })
+          .catch(err => {
+            if (onFailure) onFailure(err);
+          });
+        };
+      }
+    });
+  }
+  window.google = { script: { run: createGasBridge(null, null) } };
+}
+// =========================================================================
 let currentManifest = null;
 let currentFileId = null;
 let currentScale = 1.0;
@@ -366,4 +403,3 @@ function updateProcessProgress(percent, stageText, isSuccess = false) {
     }, 2500);
   }
 }
-</script>

@@ -429,3 +429,53 @@ function uploadPdfFileToDrive(fileName, base64Data) {
     return { success: false, error: e.message };
   }
 }
+
+/**
+ * CỔNG API ĐỂ LIVE SERVER (VS CODE) & GITHUB GỌI TRỰC TIẾP VỀ GOOGLE DRIVE
+ */
+function doPost(e) {
+  try {
+    const body = JSON.parse(e.postData.contents);
+    const action = body.action;
+    const args = body.args || [];
+    let result = null;
+
+    switch (action) {
+      case "getInitialData":
+        result = getInitialData();
+        break;
+      case "getDriveCacheFast":
+        result = getDriveCacheFast(args[0], args[1]);
+        break;
+      case "saveDriveCacheFast":
+        result = saveDriveCacheFast(args[0], args[1], args[2]);
+        break;
+      case "getDriveAccessToken":
+        result = getDriveAccessToken();
+        break;
+      case "makeFilePublicAndGetLink":
+        result = makeFilePublicAndGetLink(args[0]);
+        break;
+      case "callCloudVisionApiBatch":
+        result = callCloudVisionApiBatch(args[0]);
+        break;
+      case "getPdfBase64Fast":
+        result = getPdfBase64Fast(args[0]);
+        break;
+      case "getPdfBase64Chunk":
+        result = getPdfBase64Chunk(args[0], args[1]);
+        break;
+      case "uploadPdfFileToDrive":
+        result = uploadPdfFileToDrive(args[0], args[1]);
+        break;
+      default:
+        throw new Error("Hành động không hợp lệ: " + action);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, data: result }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}

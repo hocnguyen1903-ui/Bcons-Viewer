@@ -1,4 +1,3 @@
-<script>
 function isSingleTechnicalCode(query) {
   const trimmed = query.trim();
   if (/\s+/.test(trimmed)) return false;
@@ -530,4 +529,3 @@ function clearSearchState() {
   document.getElementById("btn-next").disabled = true;
   document.getElementById("search-counter").textContent = "0/0";
 }
-</script>

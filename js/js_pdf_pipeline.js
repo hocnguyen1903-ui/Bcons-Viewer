@@ -1,4 +1,3 @@
-<script>
 // =========================================================================
 // 1. CÁC HÀM GIAO TIẾP VỚI GOOGLE DRIVE VÀ CLOUD VISION
 // =========================================================================
@@ -878,4 +877,3 @@ function checkDriveCacheWithRetry(fileId, fileName, retryCount, busyCount) {
       }
     });
 }
-</script>
