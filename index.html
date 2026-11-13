@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>BCONS Document Slicing Viewer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- THÊM THƯ VIỆN ĐÓNG GÓI PDF SẠCH (PDF-LIB): -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  
+  <!-- CSS MODULES -->
+  <?!= include('css_core'); ?>
+  <?!= include('css_components'); ?>
+</head>
+<body>
+
+  <!-- GIAO DIỆN HTML -->
+  <?!= include('ui_sidebar'); ?>
+  <?!= include('ui_preview'); ?>
+
+  <!-- JS MODULES -->
+  <?!= include('js_state_storage'); ?>
+  <?!= include('js_search_engine'); ?>
+  <?!= include('js_pdf_pipeline'); ?>
+  <?!= include('js_ui_events'); ?>
+
+</body>
+</html>

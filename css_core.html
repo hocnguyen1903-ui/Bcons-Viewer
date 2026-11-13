@@ -1,0 +1,173 @@
+<style>
+/* TRIỆT TIÊU 100% HIỆU ỨNG ĐỔ BÓNG VÀ BÓNG CHỮ TRÊN TOÀN GIAO DIỆN & KHI HOVER */
+*, *::before, *::after, *:hover, *:focus, *:active {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #011222;
+  color: #fff;
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+#sidebar {
+  width: 130px;
+  background: #031c35;
+  border-right: 1.5px solid rgba(255, 186, 8, 0.3);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.sidebar-header { 
+  height: 48px; 
+  display: flex; 
+  align-items: center; 
+  padding: 0 10px; 
+  background: #FFBA08; 
+  color: #031c35; 
+  font-size: 9px; 
+  text-transform: uppercase; 
+  letter-spacing: 0.3px; 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  flex-shrink: 0; 
+}
+
+#upload-zone {
+  margin: 8px;
+  padding: 12px 5px;
+  border: 1px dashed rgba(255, 186, 8, 0.5);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  color: #8fa0b3;
+  font-size: 8.5px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+#upload-zone:hover, #upload-zone.dragover {
+  background: rgba(255, 186, 8, 0.1);
+  border-color: #FFBA08;
+  color: #FFBA08;
+}
+
+#upload-zone i {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 4px;
+  color: #FFBA08;
+}
+
+#file-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.file-item {
+  padding: 8px 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 9px;
+  word-break: break-word;
+  line-height: 1.3;
+}
+
+.file-item:hover, .file-item.active {
+  background: rgba(255, 186, 8, 0.15);
+  border-color: #FFBA08;
+  color: #FFBA08;
+}
+
+#main-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: #021426;
+}
+
+.prv-toolbar { 
+  height: 48px; 
+  background: #FFBA08; 
+  color: #031c35; 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
+  padding: 0 15px; 
+  flex-shrink: 0; 
+  font-size: 9px; 
+}
+
+.prv-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prv-btn {
+  border: none;
+  background: #031c35;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.prv-btn:hover:not(:disabled) {
+  background: #052c54;
+}
+
+#viewport-container {
+  flex: 1;
+  overflow: auto;
+  overflow-anchor: none;
+  --doc-scale: 1;
+  position: relative;
+  cursor: grab;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 25px 0 80px 0;
+  gap: 20px;
+}
+
+.page-img {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  image-rendering: auto !important;
+}
+
+#viewport-container.grabbing {
+  cursor: grabbing !important;
+}
+
+.page-wrapper {
+  position: relative;
+  background: #ffffff;
+  box-shadow: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 12px;
+}
+</style>
